@@ -1,4 +1,4 @@
-## VMware VMDK to Proxmox Migration Guide
+## VMware VMDK VM migration to Proxmox VE
 
 This guide provides a step-by-step process for migrating a **VMware virtual machine (VMDK)** to **Proxmox VE**.  
 It covers disk transfer, format conversion, import into Proxmox, and guest optimization.
