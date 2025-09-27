@@ -1,12 +1,13 @@
-# VMware VMDK to Proxmox Migration Guide
+## VMware VMDK to Proxmox Migration Guide
 
 This guide provides a step-by-step process for migrating a **VMware virtual machine (VMDK)** to **Proxmox VE**.  
 It covers disk transfer, format conversion, import into Proxmox, and guest optimization.
 
 ---
 
-## ✅ Pre-Migration Checklist
-- VM must be **powered off**.
+### ✅ Pre-Migration Checklist
+- VM must be **powered off** in VMware.
+- Ensure all snapshots are deleted/committed (Proxmox import doesn’t handle VMware snapshots well)
 - Check source VM disk size.  
 - Ensure Proxmox node has enough **free space** on target storage.  
 - Note down the VM’s **hardware resources** (CPU, RAM, NICs, disk sizes).  
@@ -15,7 +16,7 @@ It covers disk transfer, format conversion, import into Proxmox, and guest optim
 
 ---
 
-## 🔹 Step 1: Access VMware ESXi and Locate the VM Directory
+### 🔹 Step 1: Access VMware ESXi and Locate the VM Directory
 ```bash
 ssh root@10.192.192.50
 cd /vmfs/volumes/datastore1/xyz-frontend-vm
@@ -23,12 +24,18 @@ cd /vmfs/volumes/datastore1/xyz-frontend-vm
 
 ---
 
-## 🔹 Step 2: Copy VMDK Files to Proxmox
-Confirm the following exist:
-- `xyz-frontend-vm.vmdk` → small descriptor file.  
-- `xyz-frontend-vm-flat.vmdk` → large data file.  
+### 🔹 Step 2: Copy VMDK Files to Proxmox
+- Confirm the following exist:
+  - `xyz-frontend-vm.vmdk` → small descriptor file.  
+  - `xyz-frontend-vm-flat.vmdk` → large data file.  
 
-Copy both to the Proxmox node:
+- Check current rulesets & Enable SSH client ruleset
+```bash
+esxcli network firewall ruleset list
+esxcli network firewall ruleset set -e true -r sshClient
+```
+- Copy both to the Proxmox node:
+
 ```bash
 scp xyz-frontend-vm.vmdk root@10.192.192.100:/root/
 scp xyz-frontend-vm-flat.vmdk root@10.192.192.100:/root/
@@ -36,7 +43,11 @@ scp xyz-frontend-vm-flat.vmdk root@10.192.192.100:/root/
 
 ---
 
-## 🔹 Step 3: Create a New VM Shell in Proxmox
+### 🔹 Step 3: Create a New VM Shell in Proxmox or In the Proxmox GUI, create a new VM with the desired ID (VMID).
+
+- Choose do not create/attach a disk (since you’ll import one).
+- Configure CPU, RAM, and network similar to the VMware VM.
+
 ```bash
 ssh root@10.192.192.100
 qm create 105 --name app1-vm --memory 2048 --cores 2 --scsihw pvscsi
@@ -44,7 +55,7 @@ qm create 105 --name app1-vm --memory 2048 --cores 2 --scsihw pvscsi
 
 ---
 
-## 🔹 Step 4: Convert VMDK to QCOW2
+### 🔹 Step 4: Convert VMDK to QCOW2
 ```bash
 cd /root/
 qemu-img convert -f vmdk -O qcow2 xyz-frontend-vm.vmdk vm-disk.qcow2
@@ -54,7 +65,7 @@ du -sh vm-disk.qcow2
 
 ---
 
-## 🔹 Step 5: Import Disk into Proxmox Storage
+### 🔹 Step 5: Import Disk into Proxmox Storage
 ```bash
 qm importdisk 105 vm-disk.qcow2 local-lvm
 lvs
@@ -62,7 +73,7 @@ lvs
 
 ---
 
-## 🔹 Step 6: Attach Disk to VM
+### 🔹 Step 6: Attach Disk to VM
 ```bash
 qm set 105 --scsi0 local-lvm:vm-105-disk-0
 qm set 105 --boot order=scsi0
@@ -70,7 +81,7 @@ qm set 105 --boot order=scsi0
 
 ---
 
-## 🔹 Step 7: Configure Networking
+### 🔹 Step 7: Configure Networking
 Use the Proxmox Web GUI:
 
 1. **VM → Hardware → Add → Network Device**  
@@ -79,9 +90,9 @@ Use the Proxmox Web GUI:
 
 ---
 
-## 🔹 Step 8: Optimize Guest OS
+### 🔹 Step 8: Optimize Guest OS
 
-### Remove VMware Tools
+#### Remove VMware Tools
 - **Legacy VMware Tools:**
 ```bash
 sudo vmware-uninstall-tools.pl
@@ -96,7 +107,7 @@ sudo apt purge open-vm-tools open-vm-tools-desktop -y
 sudo yum remove open-vm-tools -y
 ```
 
-### Install QEMU Guest Agent
+#### Install QEMU Guest Agent
 ```bash
 # Debian/Ubuntu
 sudo apt install qemu-guest-agent -y
@@ -111,14 +122,14 @@ Enable it in Proxmox GUI: **VM → Options → QEMU Guest Agent → Enable**
 
 ---
 
-## 🔹 Step 9: Start the VM
+### 🔹 Step 9: Start the VM
 ```bash
 qm start 105
 ```
 
 ---
 
-## ⚠️ Troubleshooting
+### ⚠️ Troubleshooting
 - If VM fails to boot:
   - Switch disk controller to `lsi` or `sata`.  
   - Boot with OS install ISO → Rescue mode → rebuild initramfs:  
@@ -130,4 +141,4 @@ qm start 105
 
 ---
 
-✅ Migration complete! Your VMware VM is now running under **Proxmox VE (QEMU/KVM)**.
+
